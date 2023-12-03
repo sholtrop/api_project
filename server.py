@@ -45,10 +45,8 @@ def ws_handler(model, feature_extractor):
                 inferences.append(predictions[0])
                 print('Predictions so far:', inferences)
                 if len(inferences) == 3:
-                    winner = majority(inferences)
-                    print('Got 3 predictions. Sending back majority:', winner)
-                    await websocket.send(f"\{winner: {winner}\}")
-                    inferences.clear()
+                    await websocket.send(f"winner: {inferences[len(inferences)-1]}")
+                    inferences.pop(0)
 
         except websockets.exceptions.ConnectionClosedOK:
                 print("Client disconnected")

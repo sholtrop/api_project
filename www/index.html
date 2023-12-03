@@ -8,13 +8,43 @@
 <script src="./audiobuffer-to-wav.js"> </script>
 
 <script async defer>
-  // 3 second clips
-  const clipSize = 3000;
-  const ws = new WebSocket(`ws://localhost:8765`)
-  const audioContext = new AudioContext();
-  let mediaRecorders;
+  let analyser;
+  const clipSecs = 3;
+  let audioContext;
   let oneSecChunks = []
 
+  const ws = new WebSocket(`ws://localhost:8765`)
+  ws.onmessage = (msg) => {
+    const result = document.getElementById('result')
+    console.log(`Got message: `, msg.data)
+    const prediction = msg.data.split(':')[1]
+    result.innerText = `Prediction: ${prediction}`
+
+  }
+
+
+  function visualize() {
+    const canvas = document.getElementById('visualizer');
+    const canvasContext = canvas.getContext('2d');
+    const bufferLength = analyser.frequencyBinCount;
+    const dataArray = new Uint8Array(bufferLength);
+    analyser.getByteFrequencyData(dataArray);
+
+    canvasContext.clearRect(0, 0, canvas.width, canvas.height);
+    const barWidth = (canvas.width / bufferLength) * 2.5;
+    let barHeight;
+    let x = 0;
+
+    for (let i = 0; i < bufferLength; i++) {
+      barHeight = dataArray[i] / 2;
+
+      canvasContext.fillStyle = `rgb(50,${(barHeight + 100)},50)`;
+      canvasContext.fillRect(x, canvas.height - barHeight, barWidth, barHeight);
+
+      x += barWidth + 1;
+    }
+    requestAnimationFrame(visualize);
+  }
 
   async function startRecording() {
     const stream = await navigator.mediaDevices
@@ -22,23 +52,21 @@
         audio: true,
       },
       );
+    audioContext = new AudioContext();
     const source = audioContext.createMediaStreamSource(stream);
     const mediaRecorder =
       new MediaRecorder(source.mediaStream);
-
-
+    analyser = audioContext.createAnalyser();
+    source.connect(analyser)
+    analyser.fftSize = 256;
+    analyser.smoothingTimeConstant = 0.8;
     mediaRecorder.ondataavailable = handleAudioData;
+    visualize();
     while (true) {
       mediaRecorder.start();
       await sleep(1000);
       mediaRecorder.stop()
     }
-
-    // const audioContext = new AudioContext();
-    // const source = audioContext.createMediaStreamSource(stream);
-    // const analyser = audioContext.createAnalyser();
-    // analyser.fftSize = 256;
-    // source.connect(analyser);
 
   }
 
@@ -48,41 +76,43 @@
     })
   }
 
-  // function createAudioHandler(mediaRecorder) {
   async function handleAudioData(event) {
     const arrayBuffer = await event.data.arrayBuffer();
     const chunk = await audioContext.decodeAudioData(arrayBuffer);
+
+    // We might accumulate 1 second chunks faster than we can process them. If this happens, we will get garbage audio.
+    // To prevent this, we'll wait if the buffer is full.
+    while (oneSecChunks.length >= clipSecs)
+      await sleep(10)
+
     oneSecChunks.push(chunk);
-    if (oneSecChunks.length === 3) {
+    if (oneSecChunks.length >= clipSecs) {
       const audioClip = concatBuffer(oneSecChunks);
-      const wav = audioBufferToWav(audioClip)
-      ws.send(wav);
-      console.log('Sent audioclip wav', audioClip);
       oneSecChunks.shift();
+      const wav = audioBufferToWav(audioClip);
+      ws.send(wav);
     }
   }
 
   function concatBuffer(buffers) {
-    var buflengh = buffers.length;
+    var buflength = buffers.length;
     var channels = [];
-    var totalDuration = 0;
-    for (var a = 0; a < buflengh; a++) {
-      channels.push(buffers[a].numberOfChannels);// Store all number of channels to choose the lowest one after
-      totalDuration += buffers[a].duration;// Get the total duration of the new buffer when every buffer will be added/concatenated
+    var totalSamples = 0;
+    for (var a = 0; a < buflength; a++) {
+      totalSamples += buffers[a].length;
     }
-    var numberOfChannels = channels.reduce(function (a, b) { return Math.min(a, b); });// The lowest value contained in the array channels
-    var tmp = audioContext.createBuffer(numberOfChannels, audioContext.sampleRate * totalDuration, audioContext.sampleRate);// Create new buffer
-    for (var b = 0; b < numberOfChannels; b++) {
-      var channel = tmp.getChannelData(b);
-      var dataIndex = 0;
-      for (var c = 0; c < buflengh; c++) {
-        channel.set(buffers[c].getChannelData(b), dataIndex);
-        dataIndex += buffers[c].length;// Next position where we should store the next buffer values
-      }
+
+    var numberOfChannels = 1
+    var tmp = audioContext.createBuffer(numberOfChannels, totalSamples, audioContext.sampleRate);// Create new buffer
+    var channel = tmp.getChannelData(0);
+    var dataIndex = 0;
+    for (var c = 0; c < buflength; c++) {
+      channel.set(buffers[c].getChannelData(0), dataIndex);
+      dataIndex += buffers[c].length;// Next position where we should store the next buffer values
     }
+
     return tmp;
   }
-
 
   function handleClick() {
     const btn = document.getElementById("startBtn");
@@ -95,6 +125,11 @@
 <body>
   <div class="container">
     <button id="startBtn" onclick="handleClick()">Start recording</button>
+
+    <canvas id="visualizer" width="300" height="150"></canvas>
+
+    <div id="result"></div>
+
   </div>
 </body>
 
@@ -105,10 +140,24 @@
     height: 5rem;
   }
 
+  #visualizer {
+    width: 300px;
+    height: 150px;
+    margin-top: 1rem;
+    background-color: gainsboro;
+  }
+
   .container {
     display: flex;
+    flex-direction: column;
     align-items: center;
     justify-content: center;
+  }
+
+  #result {
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 2.5rem;
+    margin-top: 1rem;
   }
 </style>
 
