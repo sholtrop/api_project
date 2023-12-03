@@ -35,11 +35,6 @@ def ws_handler(model, feature_extractor):
                 audio_data = await websocket.recv()
 
                 print('Got audio data', len(audio_data), 'bytes. Running inference...')
-                # buffer.extend(audio_data)
-
-                # Enough audio data gathered (about 5 sec), time for inference
-                # if (len(buffer) > 5 * 16500):
-                # print('Buffered', len(buffer), 'bytes. Running inference...')
                 tempid = generate('1234567890abcdef', 14) 
                 tempfile = f'/tmp/{tempid}.wav'
                 with open(tempfile, 'wb') as fp:
@@ -55,8 +50,6 @@ def ws_handler(model, feature_extractor):
                     await websocket.send(f"\{winner: {winner}\}")
                     inferences.clear()
 
-
-
         except websockets.exceptions.ConnectionClosedOK:
                 print("Client disconnected")
     return handler
@@ -65,10 +58,6 @@ async def init():
     app = web.Application()
     app.router.add_get('/', lambda _ : web.FileResponse('./www/index.html'))
     app.router.add_static('/', './www')
-
-
-    # app.add_routes([web.static('/', './www', show_index=True)] )
-    # app.router.add_get('/', http_handler)
     return app
 
 async def main():
@@ -85,15 +74,6 @@ async def main():
     print(f"HTTP server started at http://localhost:{PORT}")
     await websockets.serve(ws_handler(model, feature_extractor=smile), 'localhost', WS_PORT)
     print(f"WS server started at ws://localhost:{WS_PORT}")
-
-    # Keep the script running
-
-    # Start the WebSocket server
-    # start_server = websockets.serve(ws_handler(model, smile), "localhost", WS_PORT)
-    # print('WS server running on port', WS_PORT)
-
-
-    # Run the server until it is manually stopped
 
 
 if __name__ == "__main__":
