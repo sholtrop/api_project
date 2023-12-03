@@ -1,11 +1,7 @@
 #!/usr/bin/env python3
 # coding: utf-8
 
-
 import asyncio
-import os
-import http.server
-import socketserver
 import websockets
 import websockets.exceptions
 from aiohttp import web
@@ -15,13 +11,20 @@ from nanoid import generate
 WS_PORT= 8765
 PORT = 3000
 
-# new_data = smile.process_file('./cabbage_10_01.wav')
+def majority(list):
+    tally = {}
+    for item in list:
+        tally.setdefault(item, 0)
+        tally[item] += 1
+    max = 0
+    max_key = None
+    for key, value in tally.items():
+        if value > max:
+            max = value
+            max_key = key
+    return max_key
 
-# new_feature = new_data._append(new_data,ignore_index=True)
 
-# predictions = model.predict(new_feature)
-
-# print(predictions)
 def ws_handler(model, feature_extractor):
     async def handler(websocket, path):
         print("Client connected")
@@ -38,7 +41,7 @@ def ws_handler(model, feature_extractor):
                 # if (len(buffer) > 5 * 16500):
                 # print('Buffered', len(buffer), 'bytes. Running inference...')
                 tempid = generate('1234567890abcdef', 14) 
-                tempfile = f'/tmp/{tempid}.webm'
+                tempfile = f'/tmp/{tempid}.wav'
                 with open(tempfile, 'wb') as fp:
                     fp.write(audio_data)
                 print('Wrote to tmpfile', tempfile)
@@ -46,10 +49,11 @@ def ws_handler(model, feature_extractor):
                 predictions = model.predict(features)
                 inferences.append(predictions[0])
                 print('Predictions so far:', inferences)
-                if len(predictions) == 3:
-                    print('Sending back predictions')
-                    # TODO send back majority vote winner
-                    predictions = []
+                if len(inferences) == 3:
+                    winner = majority(inferences)
+                    print('Got 3 predictions. Sending back majority:', winner)
+                    await websocket.send(f"\{winner: {winner}\}")
+                    inferences.clear()
 
 
 
@@ -57,18 +61,14 @@ def ws_handler(model, feature_extractor):
                 print("Client disconnected")
     return handler
 
-async def http_handler(request):
-    path = request.match_info.get('path', '.')
-    full_path = os.path.join("./www", path)
-
-    if os.path.isfile(full_path):
-        return web.FileResponse(full_path)
-    elif os.path.isdir(full_path):
-        return web.FileResponse(os.path.join(full_path, 'index.html'))
-
 async def init():
     app = web.Application()
-    app.router.add_get('/', http_handler)
+    app.router.add_get('/', lambda _ : web.FileResponse('./www/index.html'))
+    app.router.add_static('/', './www')
+
+
+    # app.add_routes([web.static('/', './www', show_index=True)] )
+    # app.router.add_get('/', http_handler)
     return app
 
 async def main():

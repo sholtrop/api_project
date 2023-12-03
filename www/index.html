@@ -2,119 +2,114 @@
 <html>
 
 <head>
-    <title>Food Analyzer</title>
+  <title>Food Analyzer</title>
 </head>
 
+<script src="./audiobuffer-to-wav.js"> </script>
+
 <script async defer>
-    // 3 second clips
-    const clipSize = 3000;
-    const ws = new WebSocket(`ws://localhost:8765`)
-    let mediaRecorders;
+  // 3 second clips
+  const clipSize = 3000;
+  const ws = new WebSocket(`ws://localhost:8765`)
+  const audioContext = new AudioContext();
+  let mediaRecorders;
+  let oneSecChunks = []
 
-    // TODO: Don't use three media recorders. Save 1 sec chunks to an array, then take 3 elements to form a 3 sec clip.
-    // You can make the 3 sec clip using `new Blob(..., { mimeType: <opus mimetype> })`
+
+  async function startRecording() {
+    const stream = await navigator.mediaDevices
+      .getUserMedia({
+        audio: true,
+      },
+      );
+    const source = audioContext.createMediaStreamSource(stream);
+    const mediaRecorder =
+      new MediaRecorder(source.mediaStream);
 
 
-    async function startRecording() {
-        const stream = await navigator.mediaDevices
-            .getUserMedia({
-                audio: true,
-            },
-            );
-        mediaRecorders = [
-            new MediaRecorder(stream, { mimeType: 'audio/webm;codecs=opus' }),
-            new MediaRecorder(stream, { mimeType: 'audio/webm;codecs=opus' }),
-            new MediaRecorder(stream, { mimeType: 'audio/webm;codecs=opus' }),
-        ];
-        // const audioContext = new AudioContext();
-        // const source = audioContext.createMediaStreamSource(stream);
-        // const analyser = audioContext.createAnalyser();
-        // analyser.fftSize = 256;
-        // source.connect(analyser);
-        mediaRecorders.forEach((rec, idx) => {
-            rec.ondataavailable = createAudioHandler(idx);
-
-            rec.onstop = () => {
-                // Keep recording
-                rec.start(clipSize);
-            }
-        })
-
-        // Start immediately
-        mediaRecorders[0].start(clipSize);
-
-        // Start at 1 sec delay
-        setTimeout(() =>
-            mediaRecorders[1].start(clipSize), 1000)
-
-        // Start at 2 sec delay
-        setTimeout(
-            mediaRecorders[2].start(clipSize), 2000);
+    mediaRecorder.ondataavailable = handleAudioData;
+    while (true) {
+      mediaRecorder.start();
+      await sleep(1000);
+      mediaRecorder.stop()
     }
 
-    // const reader = new FileReader();
-    function createAudioHandler(idx) {
-        return function handleAudioData(event) {
-            console.log('Idx', idx, ' send data')
-            ws.send(event.data);
-            mediaRecorders[idx].stop();
+    // const audioContext = new AudioContext();
+    // const source = audioContext.createMediaStreamSource(stream);
+    // const analyser = audioContext.createAnalyser();
+    // analyser.fftSize = 256;
+    // source.connect(analyser);
 
+  }
 
-            // if (event.data.size > 0) {
-            // reader.onload = function (e) {
-            // const audioData = new Int8Array(e.target.result);
-            // const isSilent = isAudioSilent(audioData);
+  async function sleep(ms) {
+    return new Promise((resolve) => {
+      setTimeout(() => resolve(), ms)
+    })
+  }
 
-            // if (!isSilent) {
-            // Process non-silent audio data (send to server, etc.)
-            // console.log({ audioData });
-            // ws.send(audioData);
-            // mediaRecorder.stop();
-            // startRecording();
-            // };
-
-            //     }
-            // };
-            // reader.readAsArrayBuffer(event.data);
-        }
+  // function createAudioHandler(mediaRecorder) {
+  async function handleAudioData(event) {
+    const arrayBuffer = await event.data.arrayBuffer();
+    const chunk = await audioContext.decodeAudioData(arrayBuffer);
+    oneSecChunks.push(chunk);
+    if (oneSecChunks.length === 3) {
+      const audioClip = concatBuffer(oneSecChunks);
+      const wav = audioBufferToWav(audioClip)
+      ws.send(wav);
+      console.log('Sent audioclip wav', audioClip);
+      oneSecChunks.shift();
     }
+  }
 
-    const silenceThreshold = 50;
-    function isAudioSilent(audioData) {
-        const sum = audioData.reduce((acc, value) => acc + Math.abs(value), 0);
-        const avg = sum / audioData.length;
-        console.log({ avg })
-        // Adjust the threshold based on your requirements
-        return avg < silenceThreshold;
+  function concatBuffer(buffers) {
+    var buflengh = buffers.length;
+    var channels = [];
+    var totalDuration = 0;
+    for (var a = 0; a < buflengh; a++) {
+      channels.push(buffers[a].numberOfChannels);// Store all number of channels to choose the lowest one after
+      totalDuration += buffers[a].duration;// Get the total duration of the new buffer when every buffer will be added/concatenated
     }
-
-
-    function handleClick() {
-        const btn = document.getElementById("startBtn");
-        btn.setAttribute('disabled', 'true');
-        startRecording();
+    var numberOfChannels = channels.reduce(function (a, b) { return Math.min(a, b); });// The lowest value contained in the array channels
+    var tmp = audioContext.createBuffer(numberOfChannels, audioContext.sampleRate * totalDuration, audioContext.sampleRate);// Create new buffer
+    for (var b = 0; b < numberOfChannels; b++) {
+      var channel = tmp.getChannelData(b);
+      var dataIndex = 0;
+      for (var c = 0; c < buflengh; c++) {
+        channel.set(buffers[c].getChannelData(b), dataIndex);
+        dataIndex += buffers[c].length;// Next position where we should store the next buffer values
+      }
     }
+    return tmp;
+  }
+
+
+  function handleClick() {
+    const btn = document.getElementById("startBtn");
+    btn.setAttribute('disabled', 'true');
+    startRecording();
+  }
 
 </script>
 
 <body>
-    <div class="container">
-        <button id="startBtn" onclick="handleClick()">Start recording</button>
-    </div>
+  <div class="container">
+    <button id="startBtn" onclick="handleClick()">Start recording</button>
+  </div>
 </body>
 
 
 <style>
-    #startBtn {
-        width: 10rem;
-        height: 5rem;
-    }
+  #startBtn {
+    width: 10rem;
+    height: 5rem;
+  }
 
-    .container {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-    }
+  .container {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
 </style>
 
 </html>
