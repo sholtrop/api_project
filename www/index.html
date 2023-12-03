@@ -6,47 +6,77 @@
 </head>
 
 <script async defer>
+    // 3 second clips
+    const clipSize = 3000;
     const ws = new WebSocket(`ws://localhost:8765`)
+    let mediaRecorders;
+
+    // TODO: Don't use three media recorders. Save 1 sec chunks to an array, then take 3 elements to form a 3 sec clip.
+    // You can make the 3 sec clip using `new Blob(..., { mimeType: <opus mimetype> })`
+
 
     async function startRecording() {
-        console.debug('Start recording')
         const stream = await navigator.mediaDevices
             .getUserMedia({
                 audio: true,
             },
             );
-        const mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm;codecs=opus' });
+        mediaRecorders = [
+            new MediaRecorder(stream, { mimeType: 'audio/webm;codecs=opus' }),
+            new MediaRecorder(stream, { mimeType: 'audio/webm;codecs=opus' }),
+            new MediaRecorder(stream, { mimeType: 'audio/webm;codecs=opus' }),
+        ];
+        // const audioContext = new AudioContext();
+        // const source = audioContext.createMediaStreamSource(stream);
+        // const analyser = audioContext.createAnalyser();
+        // analyser.fftSize = 256;
+        // source.connect(analyser);
+        mediaRecorders.forEach((rec, idx) => {
+            rec.ondataavailable = createAudioHandler(idx);
 
-        const audioContext = new AudioContext();
-        const source = audioContext.createMediaStreamSource(stream);
-        const analyser = audioContext.createAnalyser();
-        analyser.fftSize = 256;
-        source.connect(analyser);
+            rec.onstop = () => {
+                // Keep recording
+                rec.start(clipSize);
+            }
+        })
 
-        const btn = document.getElementById("startBtn");
-        btn.setAttribute('disabled', 'true');
-        mediaRecorder.ondataavailable = handleAudioData;
-        mediaRecorder.start(1000);
+        // Start immediately
+        mediaRecorders[0].start(clipSize);
 
+        // Start at 1 sec delay
+        setTimeout(() =>
+            mediaRecorders[1].start(clipSize), 1000)
+
+        // Start at 2 sec delay
+        setTimeout(
+            mediaRecorders[2].start(clipSize), 2000);
     }
 
-    const reader = new FileReader();
-    function handleAudioData(event) {
-        if (event.data.size > 0) {
-            reader.onload = function (e) {
-                const audioData = new Int8Array(e.target.result);
-                const isSilent = isAudioSilent(audioData);
+    // const reader = new FileReader();
+    function createAudioHandler(idx) {
+        return function handleAudioData(event) {
+            console.log('Idx', idx, ' send data')
+            ws.send(event.data);
+            mediaRecorders[idx].stop();
 
-                if (!isSilent) {
-                    // Process non-silent audio data (send to server, etc.)
-                    console.log('Non-silent audio data:', audioData);
 
-                    ws.send(audioData);
-                };
+            // if (event.data.size > 0) {
+            // reader.onload = function (e) {
+            // const audioData = new Int8Array(e.target.result);
+            // const isSilent = isAudioSilent(audioData);
 
-            }
-        };
-        reader.readAsArrayBuffer(event.data);
+            // if (!isSilent) {
+            // Process non-silent audio data (send to server, etc.)
+            // console.log({ audioData });
+            // ws.send(audioData);
+            // mediaRecorder.stop();
+            // startRecording();
+            // };
+
+            //     }
+            // };
+            // reader.readAsArrayBuffer(event.data);
+        }
     }
 
     const silenceThreshold = 50;
@@ -57,11 +87,19 @@
         // Adjust the threshold based on your requirements
         return avg < silenceThreshold;
     }
+
+
+    function handleClick() {
+        const btn = document.getElementById("startBtn");
+        btn.setAttribute('disabled', 'true');
+        startRecording();
+    }
+
 </script>
 
 <body>
     <div class="container">
-        <button id="startBtn" onclick="startRecording()">Start recording</button>
+        <button id="startBtn" onclick="handleClick()">Start recording</button>
     </div>
 </body>
 

@@ -25,26 +25,34 @@ PORT = 3000
 def ws_handler(model, feature_extractor):
     async def handler(websocket, path):
         print("Client connected")
-        buffer = bytearray()
+        inferences = []
         try:
             while True:
                 # Receive audio stream from the WebSocket
                 audio_data = await websocket.recv()
 
-                print('Got audio data', len(audio_data), 'bytes', type(audio_data))
-                buffer.extend(audio_data)
+                print('Got audio data', len(audio_data), 'bytes. Running inference...')
+                # buffer.extend(audio_data)
 
                 # Enough audio data gathered (about 5 sec), time for inference
-                if (len(buffer) > 5 * 16500):
-                    print('Buffered', len(buffer), 'bytes. Running inference...')
-                    tempid = generate().replace('/', '_') # we don't want / in the filename
-                    tempfile = f'/tmp/{tempid}'
-                    with open(tempfile, 'wb') as fp:
-                        fp.write(buffer)
-                    features = feature_extractor.process_file(tempfile)
-                    predictions = model.predict(features)
-                    print('Predictions:', predictions)
-                    buffer = bytearray()
+                # if (len(buffer) > 5 * 16500):
+                # print('Buffered', len(buffer), 'bytes. Running inference...')
+                tempid = generate('1234567890abcdef', 14) 
+                tempfile = f'/tmp/{tempid}.webm'
+                with open(tempfile, 'wb') as fp:
+                    fp.write(audio_data)
+                print('Wrote to tmpfile', tempfile)
+                features = feature_extractor.process_file(tempfile)
+                predictions = model.predict(features)
+                inferences.append(predictions[0])
+                print('Predictions so far:', inferences)
+                if len(predictions) == 3:
+                    print('Sending back predictions')
+                    # TODO send back majority vote winner
+                    predictions = []
+
+
+
         except websockets.exceptions.ConnectionClosedOK:
                 print("Client disconnected")
     return handler
@@ -65,10 +73,9 @@ async def init():
 
 async def main():
     print('Loading model and feature extractor...')
-    from train import model_filename
     from joblib import load
     from smile import smile
-    model = load(model_filename)
+    model = load('./rf_model.xz')
     print('Loaded model and feature extractor')
     app = await init()
     runner = aiohttp.web.AppRunner(app)
