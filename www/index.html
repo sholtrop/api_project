@@ -8,8 +8,9 @@
 <script src="./audiobuffer-to-wav.js"> </script>
 
 <script async defer>
+  let recording = false;
   let analyser;
-  const clipSecs = 3;
+  const clipSecs = 2;
   let audioContext;
   let oneSecChunks = []
 
@@ -43,7 +44,10 @@
 
       x += barWidth + 1;
     }
-    requestAnimationFrame(visualize);
+    if (recording)
+      requestAnimationFrame(visualize);
+    else
+      canvasContext.clearRect(0, 0, canvas.width, canvas.height);
   }
 
   async function startRecording() {
@@ -62,12 +66,13 @@
     analyser.smoothingTimeConstant = 0.8;
     mediaRecorder.ondataavailable = handleAudioData;
     visualize();
-    while (true) {
+    while (recording) {
       mediaRecorder.start();
       await sleep(1000);
-      mediaRecorder.stop()
+      mediaRecorder.stop();
     }
-
+    mediaRecorder.stop();
+    audioContext.close();
   }
 
   async function sleep(ms) {
@@ -94,6 +99,11 @@
     }
   }
 
+  function stopRecording() {
+    recording = false;
+    oneSecChunks = [];
+  }
+
   function concatBuffer(buffers) {
     var buflength = buffers.length;
     var channels = [];
@@ -116,8 +126,15 @@
 
   function handleClick() {
     const btn = document.getElementById("startBtn");
-    btn.setAttribute('disabled', 'true');
-    startRecording();
+    if (recording) {
+      recording = false;
+      btn.innerText = 'Start recording'
+      stopRecording();
+    } else {
+      recording = true;
+      btn.innerText = 'Stop recording'
+      startRecording();
+    }
   }
 
 </script>

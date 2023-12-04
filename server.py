@@ -44,7 +44,7 @@ def ws_handler(model, feature_extractor):
                 predictions = model.predict(features)
                 inferences.append(predictions[0])
                 print('Predictions so far:', inferences)
-                if len(inferences) == 3:
+                if len(inferences) == 2:
                     await websocket.send(f"winner: {inferences[len(inferences)-1]}")
                     inferences.pop(0)
 
