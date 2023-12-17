@@ -68,7 +68,7 @@
     visualize();
     while (recording) {
       mediaRecorder.start();
-      await sleep(1000);
+      await sleep(500);
       mediaRecorder.stop();
     }
     mediaRecorder.stop();
@@ -87,11 +87,11 @@
 
     // We might accumulate 1 second chunks faster than we can process them. If this happens, we will get garbage audio.
     // To prevent this, we'll wait if the buffer is full.
-    while (oneSecChunks.length >= clipSecs)
+    while (oneSecChunks.length >= clipSecs * 2)
       await sleep(10)
 
     oneSecChunks.push(chunk);
-    if (oneSecChunks.length >= clipSecs) {
+    if (oneSecChunks.length >= clipSecs * 2) {
       const audioClip = concatBuffer(oneSecChunks);
       oneSecChunks.shift();
       const wav = audioBufferToWav(audioClip);

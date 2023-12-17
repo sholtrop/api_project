@@ -19,7 +19,7 @@ def majority(list):
     max = 0
     max_key = None
     for key, value in tally.items():
-        if value > max:
+        if value >= max:
             max = value
             max_key = key
     return max_key
@@ -44,8 +44,15 @@ def ws_handler(model, feature_extractor):
                 predictions = model.predict(features)
                 inferences.append(predictions[0])
                 print('Predictions so far:', inferences)
-                if len(inferences) == 2:
-                    await websocket.send(f"winner: {inferences[len(inferences)-1]}")
+                if len(inferences) == 4:
+                    winner = None
+                    # Correct model bias
+                    if 'chips' in inferences:
+                        winner = 'chips'
+                    else:
+                        winner = majority(inferences)
+                    print('winner', winner)
+                    await websocket.send(f"winner: {winner}")
                     inferences.pop(0)
 
         except websockets.exceptions.ConnectionClosedOK:
