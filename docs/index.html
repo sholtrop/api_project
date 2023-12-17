@@ -11,10 +11,20 @@
   let recording = false;
   let analyser;
   const clipSecs = 2;
+  const inferencesPerSecond = 2;
   let audioContext;
   let oneSecChunks = []
 
-  const ws = new WebSocket(`ws://localhost:8765`)
+  let ws
+
+  ws = new WebSocket(`ws://localhost:8765`);
+
+  ws.onerror = (e) => {
+    console.error(e);
+    const errorNode = document.getElementById('error');
+    errorNode.classList.remove('invisible');
+  }
+
   ws.onmessage = (msg) => {
     const result = document.getElementById('result')
     console.log(`Got message: `, msg.data)
@@ -24,6 +34,7 @@
   }
 
 
+  // Visualize the mic's input on the HTML canvas
   function visualize() {
     const canvas = document.getElementById('visualizer');
     const canvasContext = canvas.getContext('2d');
@@ -50,6 +61,7 @@
       canvasContext.clearRect(0, 0, canvas.width, canvas.height);
   }
 
+  // Start listening to the mic and inferring food classes
   async function startRecording() {
     const stream = await navigator.mediaDevices
       .getUserMedia({
@@ -68,30 +80,33 @@
     visualize();
     while (recording) {
       mediaRecorder.start();
-      await sleep(500);
+      await sleep(clipSecs * 1000 / inferencesPerSecond);
       mediaRecorder.stop();
     }
     mediaRecorder.stop();
     audioContext.close();
   }
 
+  // Asynchronously sleep for `ms` amount of miliseconds
   async function sleep(ms) {
     return new Promise((resolve) => {
       setTimeout(() => resolve(), ms)
     })
   }
 
+  // Audio chunk received. Decode it into PCM, concatenate it to the chunks already have, 
+  // and if we have a full clip ready for inference, convert it to WAV and send it to the server
   async function handleAudioData(event) {
     const arrayBuffer = await event.data.arrayBuffer();
     const chunk = await audioContext.decodeAudioData(arrayBuffer);
 
-    // We might accumulate 1 second chunks faster than we can process them. If this happens, we will get garbage audio.
+    // We might accumulate chunks faster than we can process them. If this happens, we will get garbage audio.
     // To prevent this, we'll wait if the buffer is full.
-    while (oneSecChunks.length >= clipSecs * 2)
+    while (oneSecChunks.length >= clipSecs * inferencesPerSecond)
       await sleep(10)
 
     oneSecChunks.push(chunk);
-    if (oneSecChunks.length >= clipSecs * 2) {
+    if (oneSecChunks.length >= clipSecs * inferencesPerSecond) {
       const audioClip = concatBuffer(oneSecChunks);
       oneSecChunks.shift();
       const wav = audioBufferToWav(audioClip);
@@ -99,11 +114,13 @@
     }
   }
 
+  // User pressed the stop button. Stop listening to mic, throw away all the accumulated chunks.
   function stopRecording() {
     recording = false;
     oneSecChunks = [];
   }
 
+  // Concatenate two audio buffers
   function concatBuffer(buffers) {
     var buflength = buffers.length;
     var channels = [];
@@ -147,6 +164,7 @@
 
     <div id="result"></div>
 
+    <div id="error" class="invisible">Error: Could not connect to WebSocket. Is the project running locally? </div>
   </div>
 </body>
 
@@ -171,10 +189,21 @@
     justify-content: center;
   }
 
+  #error {
+    color: rgb(175, 3, 3);
+    font-size: 1.5rem;
+    background-color: pink;
+    padding: 0.5rem;
+  }
+
   #result {
     font-family: Arial, Helvetica, sans-serif;
     font-size: 2.5rem;
     margin-top: 1rem;
+  }
+
+  .invisible {
+    visibility: hidden;
   }
 </style>
 

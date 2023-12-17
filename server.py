@@ -61,8 +61,8 @@ def ws_handler(model, feature_extractor):
 
 async def init():
     app = web.Application()
-    app.router.add_get('/', lambda _ : web.FileResponse('./www/index.html'))
-    app.router.add_static('/', './www')
+    app.router.add_get('/', lambda _ : web.FileResponse('./docs/index.html'))
+    app.router.add_static('/', './docs')
     return app
 
 async def main():
