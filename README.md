@@ -12,7 +12,6 @@ Our model can distinguish the following audio classes:
 ## How to run
 
 The webpage is publicly available here: https://sholtrop.github.io/api_project/
-...
 
 However, it assumes you are running the Python application locally.
 To do so, first clone the repository. Then install the dependencies (possibly in a virtualenv):
